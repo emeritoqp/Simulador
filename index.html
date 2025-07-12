@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Simulador de Vida</title>
+    <style>
+        body { display: flex; flex-direction: column; align-items: center; font-family: Arial, sans-serif; background-color: black; color: white; }
+        canvas { margin: 20px; border: 1px solid white; background-color: black; }
+        button { margin: 10px; padding: 10px 20px; }
+    </style>
+    <script src="https://www.youtube.com/iframe_api"></script>
+</head>
+<body>
+    <h1>Simulador de Vida</h1>
+    <p>Simulación de partículas con atracciones y repulsiones asimétricas basadas en tipos de color, inspirado en el proyecto Clusters de Jeffrey Ventrella, El Juego de la Vida de Conway y el proyecto de ciencia de Lisa Simpson. 8 tipos de partículas y una simple matriz de fuerzas que va evolucionando con el tiempo. La complejidad emergente no está programada directamente, sino que surge espontáneamente de la interacción de reglas simples. Si la música no tiene sonido, haz clic en cualquier lugar de la página o en el botón de música. Prueba el modo pantalla completa. Si esperas lo suficiente, puede que un organismo tome conciencia de sí mismo y hable contigo.</p>
+    <canvas id="canvas" width="1333" height="750"></canvas>
+    <button id="toggle">Pausar/Reanudar</button>
+    <button id="reset">Reiniciar</button>
+    <button id="music_toggle">Pausar/Reproducir Música</button>
+    <button id="fullscreen">Pantalla Completa</button>
+    <div id="player" style="display:none;"></div>
+
+    <script>
+        let player;
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('player', {
+                height: '0',
+                width: '0',
+                videoId: 'iUyeugHBZaI',
+                playerVars: {
+                    'autoplay': 1,
+                    'loop': 1,
+                    'playlist': 'iUyeugHBZaI',
+                    'mute': 1  // Comienza muted
+                },
+                events: {
+                    'onReady': onPlayerReady
+                }
+            });
+        }
+
+        function onPlayerReady(event) {
+            setTimeout(() => {
+                player.unMute();
+            }, 1000); // Desmutar después de 1 segundo
+        }
+
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const WIDTH = 1333;
+        const HEIGHT = 750;
+        const NUM_TYPES = 8;
+        const NUM_PARTICLES = 2800;
+        const PARTICLE_RADIUS = 2;
+        const COLORS = ['red', 'orange', 'yellow', 'green', 'blue', 'indigo', 'violet', 'pink'];
+        const R = 50; // Distancia máxima de interacción
+        const FORCE_FACTOR = 0.04; // Ajustado ligeramente para mejor rendimiento
+        const FRICTION = 0.92; // Ajustado para movimientos más suaves
+        const DT = 1;
+        let particles = [];
+        let forceMatrix = [];
+        let isRunning = true;
+        let animationId;
+        let lastMutationTime;
+
+        function init() {
+            forceMatrix = [];
+            for (let i = 0; i < NUM_TYPES; i++) {
+                forceMatrix[i] = [];
+                for (let j = 0; j < NUM_TYPES; j++) {
+                    forceMatrix[i][j] = Math.random() * 2 - 1;
+                }
+            }
+
+            particles = [];
+            const numPerType = 350;
+            for (let t = 0; t < NUM_TYPES; t++) {
+                for (let i = 0; i < numPerType; i++) {
+                    particles.push({
+                        x: Math.random() * WIDTH,
+                        y: Math.random() * HEIGHT,
+                        vx: 0,
+                        vy: 0,
+                        type: t
+                    });
+                }
+            }
+        }
+
+        function update() {
+            for (let i = 0; i < particles.length; i++) {
+                let p = particles[i];
+                let fx = 0;
+                let fy = 0;
+                for (let j = 0; j < particles.length; j++) {
+                    if (i === j) continue;
+                    let q = particles[j];
+                    let dx = q.x - p.x;
+                    let dy = q.y - p.y;
+                    // Toroidal (bordes envueltos)
+                    if (dx > WIDTH / 2) dx -= WIDTH;
+                    if (dx < -WIDTH / 2) dx += WIDTH;
+                    if (dy > HEIGHT / 2) dy -= HEIGHT;
+                    if (dy < -HEIGHT / 2) dy += HEIGHT;
+                    let dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 0 && dist < R) {
+                        let f = forceMatrix[p.type][q.type] * (2 * (dist / R - 0.5));
+                        let unitx = dx / dist;
+                        let unity = dy / dist;
+                        fx += f * unitx;
+                        fy += f * unity;
+                    }
+                }
+                p.vx += fx * FORCE_FACTOR * DT;
+                p.vy += fy * FORCE_FACTOR * DT;
+                p.vx *= FRICTION;
+                p.vy *= FRICTION;
+                p.x += p.vx * DT;
+                p.y += p.vy * DT;
+                // Envolver posiciones
+                p.x = (p.x + WIDTH) % WIDTH;
+                p.y = (p.y + HEIGHT) % HEIGHT;
+            }
+        }
+
+        function draw() {
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, WIDTH, HEIGHT);
+            for (let p of particles) {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, PARTICLE_RADIUS, 0, 2 * Math.PI);
+                ctx.fillStyle = COLORS[p.type];
+                ctx.fill();
+            }
+        }
+
+        function animate() {
+            if (isRunning) {
+                update();
+                draw();
+                let currentTime = Date.now();
+                if (currentTime - lastMutationTime >= 30000) {
+                    let numEntries = NUM_TYPES * NUM_TYPES;
+                    let numToChange = Math.round(numEntries * 0.1);
+                    let changed = new Set();
+                    while (changed.size < numToChange) {
+                        let i = Math.floor(Math.random() * NUM_TYPES);
+                        let j = Math.floor(Math.random() * NUM_TYPES);
+                        let key = i * NUM_TYPES + j;
+                        if (!changed.has(key)) {
+                            changed.add(key);
+                            forceMatrix[i][j] = Math.random() * 2 - 1;
+                        }
+                    }
+                    lastMutationTime = currentTime;
+                }
+                animationId = requestAnimationFrame(animate);
+            }
+        }
+
+        init();
+        lastMutationTime = Date.now();
+        draw();
+        animate();
+
+        document.getElementById('toggle').addEventListener('click', () => {
+            isRunning = !isRunning;
+            if (isRunning) animate();
+        });
+
+        document.getElementById('reset').addEventListener('click', () => {
+            isRunning = false;
+            cancelAnimationFrame(animationId);
+            init();
+            lastMutationTime = Date.now();
+            draw();
+            isRunning = true;
+            animate();
+        });
+
+        document.getElementById('music_toggle').addEventListener('click', () => {
+            if (player.getPlayerState() === YT.PlayerState.PAUSED) {
+                player.playVideo();
+            } else {
+                player.pauseVideo();
+            }
+        });
+
+        document.getElementById('fullscreen').addEventListener('click', () => {
+            if (canvas.requestFullscreen) {
+                canvas.requestFullscreen();
+            } else if (canvas.mozRequestFullScreen) { // Firefox
+                canvas.mozRequestFullScreen();
+            } else if (canvas.webkitRequestFullscreen) { // Chrome, Safari & Opera
+                canvas.webkitRequestFullscreen();
+            } else if (canvas.msRequestFullscreen) { // IE/Edge
+                canvas.msRequestFullscreen();
+            }
+        });
+    </script>
+</body>
+</html>
