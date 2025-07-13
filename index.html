@@ -85,6 +85,16 @@
             }
         }, { once: true }); // Solo una vez al primer clic
 
+        // Verificar y forzar reproducción/desmuteo después de 3 segundos si no está reproduciendo
+        setTimeout(() => {
+            if (player && player.getPlayerState() !== YT.PlayerState.PLAYING) {
+                player.playVideo();
+                tryUnmute();
+            } else if (player.isMuted()) {
+                tryUnmute();
+            }
+        }, 3000);
+
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const WIDTH = 1333;
