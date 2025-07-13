@@ -22,28 +22,68 @@
 
     <script>
         let player;
+        let unmuteInterval;
+        let unmuteAttempts = 0;
+        const MAX_UNMUTE_ATTEMPTS = 5;
         function onYouTubeIframeAPIReady() {
             player = new YT.Player('player', {
                 height: '0',
                 width: '0',
-                videoId: 'iUyeugHBZaI',
+                videoId: 'uvlXwd9F3CQ',
                 playerVars: {
                     'autoplay': 1,
                     'loop': 1,
-                    'playlist': 'iUyeugHBZaI',
+                    'playlist': 'uvlXwd9F3CQ',
                     'mute': 1  // Comienza muted
                 },
                 events: {
-                    'onReady': onPlayerReady
+                    'onReady': onPlayerReady,
+                    'onStateChange': onPlayerStateChange
                 }
             });
         }
 
         function onPlayerReady(event) {
-            setTimeout(() => {
-                player.unMute();
-            }, 1000); // Desmutar después de 1 segundo
+            event.target.playVideo(); // Asegura que comience a reproducirse
+            // Intentar desmutear inmediatamente y luego en intervalos si falla
+            tryUnmute();
+            unmuteInterval = setInterval(tryUnmute, 2000); // Intentar cada 2 segundos hasta max attempts
         }
+
+        function onPlayerStateChange(event) {
+            if (event.data === YT.PlayerState.PLAYING && player.isMuted()) {
+                tryUnmute();
+            }
+        }
+
+        function tryUnmute() {
+            unmuteAttempts++;
+            if (player && player.unMute) {
+                player.unMute();
+                player.setVolume(100); // Asegura volumen alto
+                // Verificar si se desmuteó después de un breve delay
+                setTimeout(() => {
+                    if (player.isMuted()) {
+                        console.log('Unmute falló, reintentando...');
+                    } else {
+                        console.log('Música desmuteada exitosamente.');
+                        clearInterval(unmuteInterval); // Detener intentos si exitoso
+                    }
+                }, 500);
+            }
+            if (unmuteAttempts >= MAX_UNMUTE_ATTEMPTS) {
+                clearInterval(unmuteInterval);
+                console.log('Máximos intentos de desmuteo alcanzados.');
+            }
+        }
+
+        // Agregar evento de clic en el body para forzar reproducción si es necesario (política de autoplay)
+        document.body.addEventListener('click', () => {
+            if (player && player.playVideo) {
+                player.playVideo();
+                tryUnmute();
+            }
+        }, { once: true }); // Solo una vez al primer clic
 
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
@@ -53,7 +93,7 @@
         const NUM_PARTICLES = 2800;
         const PARTICLE_RADIUS = 2;
         const COLORS = ['red', 'orange', 'yellow', 'green', 'blue', 'indigo', 'violet', 'pink'];
-        const R = 50; // Distancia máxima de interacción
+        let R = 50; // Distancia máxima de interacción, ahora variable
         const FORCE_FACTOR = 0.04; // Ajustado ligeramente para mejor rendimiento
         const FRICTION = 0.92; // Ajustado para movimientos más suaves
         const DT = 1;
@@ -85,6 +125,7 @@
                     });
                 }
             }
+            R = 50; // Reset R to initial value
         }
 
         function update() {
@@ -152,6 +193,8 @@
                             forceMatrix[i][j] = Math.random() * 2 - 1;
                         }
                     }
+                    // Modificar el radio de interacción
+                    R = Math.floor(Math.random() * (100 - 30 + 1)) + 30; // Aleatorio entre 30 y 100
                     lastMutationTime = currentTime;
                 }
                 animationId = requestAnimationFrame(animate);
